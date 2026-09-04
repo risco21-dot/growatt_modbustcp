@@ -2715,6 +2715,8 @@ class GrowattModbus:
                     setattr(data, _flow_attr, _value if _value is not None else 0.0)
             if power_to_load_addr:
                 self._set_from_register(data, 'power_to_load', power_to_load_addr)
+
+            self._apply_split_phase_grid_totals(data)
             
             # Energy Today
             # For hybrid inverters (WIT/SPH-TL3 etc.), the AC energy_today register (e.g. reg 53/54)
@@ -3817,6 +3819,56 @@ class GrowattModbus:
         except Exception as e:
             logger.debug(f"Energy breakdown not available: {e}")
     
+    def _apply_split_phase_grid_totals(self, data: GrowattData) -> None:
+        # Net directional HU-US CT totals into whole-service grid flow.
+        if not self.register_map.get('net_split_phase_grid_totals'):
+            return
+
+        if 'power_to_user' in data.unread_fields or 'power_to_grid' in data.unread_fields:
+            data.unread_fields.update({'ct_grid_power', 'grid_to_load_power'})
+            return
+
+        data.ct_grid_import_total = data.power_to_user
+        data.ct_grid_export_total = data.power_to_grid
+
+        for attr_name, register_name in (
+            ('ct_grid_import_l1', 'ct_grid_import_l1_low'),
+            ('ct_grid_import_l2', 'ct_grid_import_l2_low'),
+            ('ct_grid_export_l1', 'ct_grid_export_l1_low'),
+            ('ct_grid_export_l2', 'ct_grid_export_l2_low'),
+            ('inverter_to_load_l1', 'inverter_to_load_l1_low'),
+            ('inverter_to_load_l2', 'inverter_to_load_l2_low'),
+        ):
+            addr = self._find_register_by_name(register_name)
+            if addr is not None:
+                value = self._get_register_value(addr)
+                if value is None:
+                    data.unread_fields.add(attr_name)
+                else:
+                    setattr(data, attr_name, value)
+
+        # Forward and reverse can both be non-zero on split phase.
+        net_grid_power = data.ct_grid_export_total - data.ct_grid_import_total
+        data.ct_grid_power = net_grid_power
+        data.grid_to_load_power = max(0.0, -net_grid_power)
+        data.power_to_grid = max(0.0, net_grid_power)
+        data.power_to_user = max(0.0, -net_grid_power)
+
+    def _derive_profile_battery_current(self, data: GrowattData) -> None:
+        # Derive live current where the HU-US BMS field is not live current.
+        if not self.register_map.get('derive_battery_current_from_power'):
+            return
+
+        required = ('battery_voltage', 'charge_power', 'discharge_power')
+        if any(field in data.unread_fields for field in required) or data.battery_voltage <= 0:
+            data.unread_fields.add('battery_current')
+            return
+
+        # Integration convention: positive = discharge, negative = charge.
+        data.battery_current = (
+            data.discharge_power - data.charge_power
+        ) / data.battery_voltage
+
     def _read_battery_data(self, data: GrowattData) -> None:
         """Read battery data (storage/hybrid models)"""
         try:
@@ -4111,6 +4163,8 @@ class GrowattModbus:
                     data.discharge_power = data.battery_voltage * data.battery_current
                     logger.debug(f"Discharge power (calculated): {data.battery_voltage}V × {data.battery_current}A = {data.discharge_power}W")
             
+            self._derive_profile_battery_current(data)
+
             # Charge energy today
             # Try both naming conventions with smart fallback: "charge_energy_today" and "battery_charge_today"
             value = self._get_register_value_with_fallback('charge_energy_today_low')
@@ -4233,6 +4287,7 @@ class GrowattModbus:
                 ('bms_error_old', 'BMS Error Old'),
                 ('bms_error', 'BMS Error'),
                 ('bms_max_current', 'BMS Max Current'),
+                ('bms_current_limit_status', 'BMS Current Limit/Status'),
                 ('bms_gauge_rm', 'BMS Gauge RM'),
                 ('bms_gauge_fcc', 'BMS Gauge FCC'),
                 ('bms_fw_version', 'BMS FW Version'),

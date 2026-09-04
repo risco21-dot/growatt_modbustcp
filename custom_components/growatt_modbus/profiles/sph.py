@@ -691,6 +691,9 @@ SPH_8000_10000_HU = {
     'description': 'Single-phase hybrid inverter with battery storage and 3 MPPT inputs (8-10kW). Models: SPH/SPM 8000-10000TL-HU.',
     'notes': 'Uses 0-124 and 1000-1124 register ranges. Single-phase with 3 PV strings, detailed power flow and energy tracking.',
     'use_mppt_energy_today': True,  # Reg 53/54 = system AC output incl. battery discharge; use per-MPPT DC sum instead
+    # Field-confirmed on SPH-10000-US UL2.21, US 120/240 V split phase.
+    'net_split_phase_grid_totals': True,
+    'derive_battery_current_from_power': True,
     'input_registers': {
         # === BASE RANGE (0-124) - Same as SPH_7000_10000 ===
         **SPH_7000_10000['input_registers'],
@@ -719,15 +722,26 @@ SPH_8000_10000_HU = {
         1011: {'name': 'charge_power_high', 'scale': 1, 'unit': '', 'pair': 1012},
         1012: {'name': 'charge_power_low', 'scale': 1, 'unit': '', 'pair': 1011, 'combined_scale': 0.1, 'combined_unit': 'W'},
 
-        # Power Flow - Critical for grid import/export tracking
-        1015: {'name': 'power_to_user_high', 'scale': 1, 'unit': '', 'pair': 1016, 'desc': 'Power to user (grid import when positive)'},
-        1016: {'name': 'power_to_user_low', 'scale': 1, 'unit': '', 'pair': 1015, 'combined_scale': 0.1, 'combined_unit': 'W'},
-        # Same correction as the two profiles above — see #369 and the note there.
-        1021: {'name': 'power_to_user_total_high', 'scale': 1, 'unit': '', 'pair': 1022, 'desc': 'AC power to user total H (PactouserTotal) — grid import'},
-        1022: {'name': 'power_to_user_total_low', 'scale': 1, 'unit': '', 'pair': 1021, 'combined_scale': 0.1, 'combined_unit': 'W'},
-        1029: {'name': 'power_to_grid_high', 'scale': 1, 'unit': '', 'pair': 1030, 'desc': 'AC power to grid total H (Pactogrid total, positive=export)'},
-        1030: {'name': 'power_to_grid_low', 'scale': 1, 'unit': '', 'pair': 1029, 'combined_scale': 0.1, 'combined_unit': 'W', 'signed': True},
-        1037: {'name': 'power_to_load_high', 'scale': 1, 'unit': '', 'pair': 1038, 'desc': 'INV power to local load total H (PLocalLoad total) — house load'},
+        # Power flow - field-confirmed on SPH-10000-US UL2.21.
+        # R/S are the two 120 V legs. The utility meter sees the net 120/240 V service,
+        # so the generic import/export sensors use TOTAL forward/reverse and net them.
+        1015: {'name': 'ct_grid_import_l1_high', 'scale': 1, 'unit': '', 'pair': 1016, 'desc': 'L1 forward/import HIGH (PactouserR)'},
+        1016: {'name': 'ct_grid_import_l1_low', 'scale': 1, 'unit': '', 'pair': 1015, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1017: {'name': 'ct_grid_import_l2_high', 'scale': 1, 'unit': '', 'pair': 1018, 'desc': 'L2 forward/import HIGH (PactouserS)'},
+        1018: {'name': 'ct_grid_import_l2_low', 'scale': 1, 'unit': '', 'pair': 1017, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1021: {'name': 'power_to_user_high', 'scale': 1, 'unit': '', 'pair': 1022, 'desc': 'Whole-service forward/import HIGH (PactouserTotal)'},
+        1022: {'name': 'power_to_user_low', 'scale': 1, 'unit': '', 'pair': 1021, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1023: {'name': 'ct_grid_export_l1_high', 'scale': 1, 'unit': '', 'pair': 1024, 'desc': 'L1 reverse/export HIGH (PactogridR)'},
+        1024: {'name': 'ct_grid_export_l1_low', 'scale': 1, 'unit': '', 'pair': 1023, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1025: {'name': 'ct_grid_export_l2_high', 'scale': 1, 'unit': '', 'pair': 1026, 'desc': 'L2 reverse/export HIGH (PactogridS)'},
+        1026: {'name': 'ct_grid_export_l2_low', 'scale': 1, 'unit': '', 'pair': 1025, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1029: {'name': 'power_to_grid_high', 'scale': 1, 'unit': '', 'pair': 1030, 'desc': 'Whole-service reverse/export HIGH (PactogridTotal)'},
+        1030: {'name': 'power_to_grid_low', 'scale': 1, 'unit': '', 'pair': 1029, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1031: {'name': 'inverter_to_load_l1_high', 'scale': 1, 'unit': '', 'pair': 1032, 'desc': 'L1 inverter-to-load HIGH (PLocalLoadR)'},
+        1032: {'name': 'inverter_to_load_l1_low', 'scale': 1, 'unit': '', 'pair': 1031, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1033: {'name': 'inverter_to_load_l2_high', 'scale': 1, 'unit': '', 'pair': 1034, 'desc': 'L2 inverter-to-load HIGH (PLocalLoadS)'},
+        1034: {'name': 'inverter_to_load_l2_low', 'scale': 1, 'unit': '', 'pair': 1033, 'combined_scale': 0.1, 'combined_unit': 'W'},
+        1037: {'name': 'power_to_load_high', 'scale': 1, 'unit': '', 'pair': 1038, 'desc': 'Total inverter-to-load HIGH (PLocalLoadTotal)'},
         1038: {'name': 'power_to_load_low', 'scale': 1, 'unit': '', 'pair': 1037, 'combined_scale': 0.1, 'combined_unit': 'W'},
         1039: {'name': 'self_consumption_percentage', 'scale': 1, 'unit': '%'},
 
@@ -779,7 +793,11 @@ SPH_8000_10000_HU = {
         #     #397 already corrects that at read time on any firmware that does so.
         # Neither has a device report behind it and no HU owner has measured either.
         1087: {'name': 'battery_voltage', 'scale': 0.1, 'unit': 'V', 'desc': 'Battery voltage from BMS (shadowed by 1013; scale unverified)'},
-        1088: {'name': 'battery_current', 'scale': 0.01, 'unit': 'A', 'desc': 'Battery current from BMS (ESS Protocol 0x0017, 10 mA)', 'signed': True},
+        # SPH-10000-US UL2.21 does not expose live battery current at 1088.
+        # Field data produced a current-limit/status-like value here while power flow
+        # showed only a few amps. Other SPH hardware has confirmed 1088 as live current
+        # (#397), so this exception stays scoped to this HU profile.
+        1088: {'name': 'bms_current_limit_status', 'scale': 0.1, 'unit': 'A', 'desc': 'HU-US BMS current limit/status value; not live battery current'},
         1089: {'name': 'battery_temp', 'scale': 0.1, 'unit': '°C', 'desc': 'Battery temperature from BMS (whole degrees per ESS; corrected at read time)', 'signed': True},
         1090: {'name': 'bms_max_current', 'scale': 0.1, 'unit': 'A', 'desc': 'Max charge/discharge current from BMS'},
         1091: {'name': 'bms_gauge_rm', 'scale': 1, 'unit': '', 'desc': 'Gauge RM from BMS'},

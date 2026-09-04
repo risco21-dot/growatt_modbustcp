@@ -119,20 +119,28 @@ def test_battery_current_uses_the_measured_scale(profile_name):
     )
 
 
-def test_every_sph_map_agrees_on_the_battery_current_scale():
-    """The ESS Protocol, which V1.39 names as the reference for the BMS block, documents
-    register 0x0017 in units of 10 mA - so 0.01 A. SPH_8000_10000_HU carried 0.1, which was
-    neither documented nor measured and most likely came by analogy from register 3170
-    (Ibat), which really is 0.1 A on a different range.
+def test_instrument_confirmed_sph_maps_keep_the_battery_current_scale():
+    """The ESS Protocol documents 1088 in 10 mA units and #397 confirmed that behavior
+    with a clamp meter on the instrument-tested SPH families. Keep those maps at 0.01 A.
 
-    All five maps now agree. A single map drifting back would give one family readings ten
-    times out, which is plausible enough not to be noticed (#397)."""
-    for profile_name in BATTERY_CURRENT_PROFILES + ["SPH_8000_10000_HU"]:
+    SPH_8000_10000_HU is deliberately excluded: field data from an SPH-10000-US UL2.21
+    shows 1088 behaving like a current-limit/status field rather than live battery current.
+    That profile derives live current from battery power and voltage instead."""
+    for profile_name in BATTERY_CURRENT_PROFILES:
         registers = getattr(_sph, profile_name)["input_registers"]
+        assert registers[1088]["name"] == "battery_current"
         assert registers[1088]["scale"] == 0.01, (
             f"{profile_name} declares {registers[1088]['scale']} for battery current; "
-            f"the ESS Protocol documents 10 mA"
+            f"the ESS Protocol and #397 support 10 mA"
         )
+
+
+def test_hu_us_1088_is_kept_separate_from_live_battery_current():
+    """Do not reapply another SPH model's 1088 semantics to the HU-US field map."""
+    register = _sph.SPH_8000_10000_HU["input_registers"][1088]
+    assert register["name"] == "bms_current_limit_status"
+    assert register["scale"] == 0.1
+    assert _sph.SPH_8000_10000_HU["derive_battery_current_from_power"] is True
 
 
 def test_the_ess_protocol_reference_survives_in_the_docs():
