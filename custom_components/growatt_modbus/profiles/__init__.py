@@ -50,6 +50,25 @@ REGISTER_MAPS = {
     **TL3S_REGISTER_MAPS,
 }
 
+# TEMPORARY FIELD-DATA OVERRIDE — SPH-10000-US / UL2.21 only.
+#
+# This diagnostic branch intentionally restores register 1088 to the historical
+# `battery_current` entity at 0.1 A/count so Home Assistant Recorder can collect
+# several full charge/discharge cycles against SOC. On this HU firmware the value
+# does NOT represent instantaneous pack current; historical captures show 140 A at
+# 78% SOC and 40 A at 99% SOC while battery power is near zero. The purpose here is
+# continuity with the old recorder entity so the exact SOC transition points can be
+# measured. Do not merge this override upstream.
+_hu_diag = REGISTER_MAPS.get("SPH_8000_10000_HU")
+if _hu_diag is not None:
+    _hu_diag["derive_battery_current_from_power"] = False
+    _hu_diag.setdefault("input_registers", {})[1088] = {
+        "name": "battery_current",
+        "scale": 0.1,
+        "unit": "A",
+        "desc": "TEMP HU diagnostic: raw 1088 at historical 0.1 A/count; not instantaneous battery current",
+    }
+
 
 def get_profile(profile_key: str) -> Optional[Dict]:
     """Get a profile by its key.
